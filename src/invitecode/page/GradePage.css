@@ -1,0 +1,59 @@
+.vip-page {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    background: linear-gradient(120deg, rgb(255, 255, 255), rgb(251, 225, 225), rgb(244, 151, 201));
+}
+
+.vvip-page {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    background: linear-gradient(120deg, rgb(255, 255, 255), rgb(216, 248, 245), rgb(8, 201, 244));
+}
+
+.dia-page {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    background: linear-gradient(120deg, rgb(255, 255, 255), rgb(253, 207, 207), rgb(244, 83, 113));
+}
+
+.title-vip{
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Dancing Script', cursive;
+    font-size: 58px;
+    font-weight: 800;
+    color: rgb(244, 151, 201);
+    margin: 0;
+    letter-spacing:4px;
+}
+.title-vvip{
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 58px;
+    font-weight: 800;
+    font-family: 'Dancing Script', cursive;
+    color: rgb(8, 201, 244);
+    margin: 0;
+    letter-spacing:4px;
+}
+
+.title-dia{
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 58px;
+    font-weight: 800;
+    font-family: 'Dancing Script', cursive;
+    color: rgb(244, 83, 113);
+    margin: 0;
+    letter-spacing:4px;
+}
+

@@ -1,0 +1,7 @@
+.swal2-actions.delete-alert-actions {
+    gap: 20px;
+}
+
+.swal2-actions.delete-alert-actions .swal2-styled {
+    margin: 0;
+}
