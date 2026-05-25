@@ -1,25 +1,23 @@
-
-import React from "react";
-import { useForm } from "react-hook-form";
-import { CornerDownLeft, X } from "lucide-react";
+import React, { useState } from "react";
 import "../CustomerTable.css";
 
 
 export default function CustomerSearch({ onClose, onSearch }) {
-    const { register, handleSubmit } = useForm({
-        defaultValues: {
-            keyword: "",
-        },
-    });
+    const [keyword, setKeyword] = useState("");
 
-    const onSubmit = ({ keyword }) => {
-        if (onSearch) {
-            onSearch(keyword.trim());
+    const handleSubmit = (event) => {
+        event.preventDefault();
+
+        const trimmed = keyword.trim();
+
+        if (!trimmed) {
+            alert("검색어를 입력하세요.");
+            return;
         }
-    };
 
-    const onInvalid = () => {
-        alert("검색어를 입력하세요.");
+        if (onSearch) {
+            onSearch(trimmed);
+        }
     };
 
     return (
@@ -31,29 +29,25 @@ export default function CustomerSearch({ onClose, onSearch }) {
                         type="button"
                         className="search-close"
                         onClick={onClose}
-                        aria-label="검색 닫기"
                     >
-                        <X size={18} strokeWidth={2.4} />
+                        ✕
                     </button>
                 </div>
 
                 <div className="search-field">
-                    <form onSubmit={handleSubmit(onSubmit, onInvalid)}>
+                    <form onSubmit={handleSubmit}>
                         <div className="search-input-row">
                             <input
                                 type="text"
+                                value={keyword}
+                                onChange={(event) => setKeyword(event.target.value)}
                                 placeholder="검색어를 입력하세요"
-                                {...register("keyword", {
-                                    required: true,
-                                    setValueAs: (value) => value.trim(),
-                                })}
                             />
                             <button
                                 type="submit"
                                 className="search-icon-btn"
-                                aria-label="검색 실행"
                             >
-                                <CornerDownLeft size={20} strokeWidth={2.4} />
+                                ⏎
                             </button>
                         </div>
                     </form>

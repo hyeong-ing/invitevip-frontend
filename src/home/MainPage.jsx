@@ -1,10 +1,20 @@
 import { useNavigate } from "react-router-dom";
 import { LogOut, Settings, Ticket, Users } from "lucide-react";
 import keycloak from "../keycloak.js";
+import { useAuth } from "../auth/useAuth.js";
+import { getAdminRoleLabel, getCustomerPermissionText } from "../auth/authDisplay.js";
 import "./MainPage.css";
 
 export default function MainPage() {
     const navigate = useNavigate();
+    const auth = useAuth();
+    const username =
+        auth.username ||
+        keycloak.tokenParsed?.preferred_username ||
+        keycloak.tokenParsed?.name ||
+        "admin";
+    const roleLabel = getAdminRoleLabel(auth);
+    const permissionText = getCustomerPermissionText(auth);
 
     const handleCustomerMove = async () => {
         if (keycloak.authenticated) {
@@ -42,9 +52,15 @@ export default function MainPage() {
 
                 {keycloak.authenticated && (
                     <div className="main-topbar-actions">
-                        <span className="main-user-badge">
-                            {keycloak.tokenParsed?.preferred_username || "admin"}
-                        </span>
+                        <div className="main-user-badge">
+                            <span>{username}</span>
+                            {!auth.loading && (
+                                <>
+                                    <span className="main-user-role">{roleLabel}</span>
+                                    <span className="main-user-permissions">{permissionText}</span>
+                                </>
+                            )}
+                        </div>
 
                         <button
                             type="button"

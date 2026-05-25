@@ -1,14 +1,20 @@
 import { useNavigate } from "react-router-dom";
 import { Home, LogOut } from "lucide-react";
 import keycloak from "../keycloak.js";
+import { useAuth } from "../auth/useAuth.js";
+import { getAdminRoleLabel, getCustomerPermissionText } from "../auth/authDisplay.js";
 import "./PageHeader.css";
 export default function PageHeader() {
     const navigate = useNavigate();
+    const auth = useAuth();
 
     const username =
+        auth.username ||
         keycloak.tokenParsed?.preferred_username ||
         keycloak.tokenParsed?.name ||
         "admin";
+    const roleLabel = getAdminRoleLabel(auth);
+    const permissionText = getCustomerPermissionText(auth);
 
     const handleLogout = () => {
         keycloak.logout({
@@ -28,6 +34,12 @@ export default function PageHeader() {
                 </button>
 
                 <span className="page-header-user">{username}</span>
+                {!auth.loading && (
+                    <>
+                        <span className="page-header-role">{roleLabel}</span>
+                        <span className="page-header-permissions">{permissionText}</span>
+                    </>
+                )}
             </div>
 
             <div className="page-header-actions">

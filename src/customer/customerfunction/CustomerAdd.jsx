@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { Save, X } from "lucide-react";
 import "../CustomerTable.css";
 import {authFetch} from "../../auth/authFetch.js";
+import { notify } from "../../common/notify.js";
 
 const defaultValues = {
     name: "",
@@ -39,12 +40,12 @@ export default function CustomerAdd({ onAdd, onClose }) {
             });
 
             if (response.status === 409) {
-                alert("초대코드가 중복되었습니다. 다른 코드를 입력해주세요.");
+                notify.warning("초대코드가 중복되었습니다. 다른 코드를 입력해주세요.");
                 return;
             }
 
             if (!response.ok) {
-                alert("저장 실패");
+                notify.error("저장 실패");
                 return;
             }
 
@@ -56,12 +57,12 @@ export default function CustomerAdd({ onAdd, onClose }) {
             onClose();
         } catch (error) {
             console.error(error);
-            alert("오류가 발생했습니다.");
+            notify.error("오류가 발생했습니다.");
         }
     };
 
     const onInvalid = () => {
-        alert("이름, 등급, 연락처, 코드 입력은 필수이며 코드는 숫자 4자리만 가능합니다.");
+        notify.warning("이름, 등급, 연락처, 코드 입력은 필수이며 코드는 숫자 4자리만 가능합니다.");
     };
 
     return (

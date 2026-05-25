@@ -39,6 +39,22 @@
     font-weight: 600;
 }
 
+.page-header-role {
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: #edf1ec;
+    color: #33413a;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.page-header-permissions {
+    color: #4b554f;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
 .page-header-actions {
     display: flex;
     align-items: center;
