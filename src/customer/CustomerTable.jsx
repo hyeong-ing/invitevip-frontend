@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./CustomerTable.css";
 import CustomerAdd from "./customerfunction/CustomerAdd.jsx";
 import CustomerSearch from "./customerfunction/CustomerSearch.jsx";
 import CustomerEdit from "./customerfunction/CustomerEdit.jsx";
 import { authFetch } from "../auth/authFetch.js";
 import { useAuth } from "../auth/useAuth.js";
+import { notify } from "../common/notify.js";
 import Swal from "sweetalert2";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
@@ -15,17 +16,25 @@ import {
     useReactTable,
 } from "@tanstack/react-table";
 
-const fetchCustomers = async (keyword) => {
-    const url = keyword
-        ? `/api/customers/search?keyword=${encodeURIComponent(keyword)}`
-        : "/api/customers";
-    const response = await authFetch(url);
+const normalizeCustomerList = (data) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.content)) return data.content;
+    if (Array.isArray(data.customers)) return data.customers;
+    if (Array.isArray(data.items)) return data.items;
+
+    throw new Error("고객 목록 응답 형식이 올바르지 않습니다.");
+};
+
+const fetchCustomers = async () => {
+    const response = await authFetch("/api/customers");
 
     if (!response.ok) {
         throw new Error("고객 목록을 불러오지 못했습니다.");
     }
 
-    return response.json();
+    const data = await response.json();
+
+    return normalizeCustomerList(data);
 };
 
 const deleteCustomer = async (id) => {
@@ -49,8 +58,7 @@ export default function CustomerTable() {
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [editingCustomer, setEditingCustomer] = useState(null);
-    const [searchKeyword, setSearchKeyword] = useState("");
-    const canRead = auth.superAdmin || auth.customerRead;
+    const [searchRows, setSearchRows] = useState(null);
     const canSearch = auth.superAdmin || auth.customerSearch;
     const canAdd = auth.superAdmin || auth.customerAdd;
     const canEdit = auth.superAdmin || auth.customerEdit;
@@ -65,14 +73,19 @@ export default function CustomerTable() {
         error,
         refetch,
     } = useQuery({
-        queryKey: ["customers", searchKeyword],
-        queryFn: () => fetchCustomers(searchKeyword),
-        enabled: canRead,
+        queryKey: ["customers"],
+        queryFn: fetchCustomers,
+        enabled: !auth.loading && auth.isAuthenticated,
     });
+    const displayedCustomers = searchRows ?? customers;
 
     const deleteMutation = useMutation({
         mutationFn: deleteCustomer,
         onSuccess: (deletedId) => {
+            setSearchRows((oldData) => {
+                if (!Array.isArray(oldData)) return oldData;
+                return oldData.filter((customer) => customer.id !== deletedId);
+            });
             queryClient.setQueriesData({ queryKey: ["customers"] }, (oldData) => {
                 if (!Array.isArray(oldData)) return oldData;
                 return oldData.filter((customer) => customer.id !== deletedId);
@@ -80,7 +93,7 @@ export default function CustomerTable() {
             queryClient.invalidateQueries({ queryKey: ["customers"] });
         },
         onError: (mutationError) => {
-            alert(mutationError.message || "삭제에 실패했습니다.");
+            notify.error(mutationError.message || "삭제에 실패했습니다.");
         },
     });
 
@@ -95,42 +108,42 @@ export default function CustomerTable() {
     const filteredRows = useMemo(
         () =>
             selectedGrades.size === 0
-                ? customers
-                : customers.filter((r) => selectedGrades.has(normalizeGrade(r.grade))),
-        [customers, selectedGrades]
+                ? displayedCustomers
+                : displayedCustomers.filter((r) => selectedGrades.has(normalizeGrade(r.grade))),
+        [displayedCustomers, selectedGrades]
     );
 
     useEffect(() => {
         setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-    }, [selectedGrades, searchKeyword]);
+    }, [selectedGrades, searchRows]);
 
     const handleRefresh = () => {
-        setSearchKeyword("");
+        setSearchRows(null);
+        setPagination((prev) => ({ ...prev, pageIndex: 0 }));
         queryClient.invalidateQueries({ queryKey: ["customers"] });
         setIsSearchOpen(false);
     };
     const handleOpenAdd = () => {
-        if (!canAdd) { alert("고객 추가 권한이 없습니다."); return; }
+        if (!canAdd) { notify.warning("고객 추가 권한이 없습니다."); return; }
         setIsAddOpen(true);
     };
 
     const handleOpenSearch = () => {
-        if (!canSearch) { alert("고객 검색 권한이 없습니다."); return; }
+        if (!canSearch) { notify.warning("고객 검색 권한이 없습니다."); return; }
         setIsSearchOpen(true);
     };
 
     const handleOpenEdit = (customer) => {
-        if (!canEdit) { alert("고객 수정 권한이 없습니다."); return; }
+        if (!canEdit) { notify.warning("고객 수정 권한이 없습니다."); return; }
         setEditingCustomer(customer);
     };
 
     const handleDeleteClick = async (customer) => {
-        if (!canDelete) { alert("고객 삭제 권한이 없습니다."); return; }
+        if (!canDelete) { notify.warning("고객 삭제 권한이 없습니다."); return; }
 
         const result = await Swal.fire({
-            title: `${customer.name}님의 정보를 삭제하시겠습니까?`,
+            title: `${customer.name}님의 정보를\n삭제하시겠습니까?`,
             icon: "warning",
-            width: "calc(32em + 16px)",
             showCancelButton: true,
             cancelButtonText: "아니오",
             confirmButtonText: "삭제",
@@ -138,6 +151,8 @@ export default function CustomerTable() {
             cancelButtonColor: "#6b7280",
             reverseButtons: true,
             customClass: {
+                popup: "delete-alert-popup",
+                title: "delete-alert-title",
                 actions: "delete-alert-actions",
             },
         });
@@ -148,7 +163,8 @@ export default function CustomerTable() {
     };
 
     const handleAdd = () => {
-        setSearchKeyword("");
+        setSearchRows(null);
+        setPagination((prev) => ({ ...prev, pageIndex: 0 }));
         queryClient.invalidateQueries({ queryKey: ["customers"] });
     };
 
@@ -156,9 +172,22 @@ export default function CustomerTable() {
         queryClient.invalidateQueries({ queryKey: ["customers"] });
     };
 
-    const handleSearch = (keyword) => {
-        setSearchKeyword(keyword);
-        setIsSearchOpen(false);
+    const handleSearch = async (keyword) => {
+        try {
+            const response = await authFetch(`/api/customers/search?keyword=${encodeURIComponent(keyword)}`);
+
+            if (!response.ok) {
+                throw new Error("고객 검색에 실패했습니다.");
+            }
+
+            const data = await response.json();
+            setSearchRows(normalizeCustomerList(data));
+            setIsSearchOpen(false);
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+        } catch (searchError) {
+            console.error("검색 오류:", searchError);
+            alert("고객 검색에 실패했습니다.");
+        }
     };
 
     const tableColumns = [
@@ -209,7 +238,7 @@ export default function CustomerTable() {
             <div className="table-card">
                 <div className="table-toolbar">
                     <div className="toolbar-left">
-                        <div className="customer-count">등록된 고객수: {filteredRows.length}명 / 전체 {customers.length}명</div>
+                        <div className="customer-count">등록된 고객수: {filteredRows.length}명 / 전체 {displayedCustomers.length}명</div>
                         <button className="btn-refresh" onClick={handleRefresh} disabled={isFetching} aria-label="고객 목록 새로고침">
                             <RefreshCw size={16} strokeWidth={2.4} />
                         </button>

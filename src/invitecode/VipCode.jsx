@@ -1,6 +1,7 @@
 import {useRef, useState} from "react";
 import './VipCode.css'
 import {useNavigate} from "react-router-dom";
+import { notify } from "../common/notify.js";
 
 export default function VipCode() {
 
@@ -26,7 +27,7 @@ export default function VipCode() {
         const code = digits.join("");
 
         if(code.length !== 4) {
-            alert("4자리 코드를 모두 입력해주세요.")
+            notify.warning("4자리 코드를 모두 입력해주세요.")
             return;
         }
 
@@ -49,7 +50,7 @@ export default function VipCode() {
             }
 
             const data = await res.json();
-            alert(`${data.name}님 환영합니다.`);
+            notify.success(`${data.name}님 환영합니다.`);
             const grade = (data.grade || "").trim().toUpperCase();
 
             if (grade === "VIP") {
@@ -66,7 +67,7 @@ export default function VipCode() {
 
         } catch(err) {
             console.error(err);
-            alert("오류 발생");
+            notify.error("오류 발생");
             setLoading(false);
         }
     };
@@ -119,4 +120,3 @@ export default function VipCode() {
     </div>
   )
 }
-

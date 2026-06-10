@@ -1,7 +1,7 @@
-import React from "react";
 import { useForm } from "react-hook-form";
 import { Save, X } from "lucide-react";
 import { authFetch } from "../../auth/authFetch.js";
+import { notify } from "../../common/notify.js";
 
 export default function CustomerEdit({ customer, onUpdate, onClose }) {
     const {
@@ -38,13 +38,13 @@ export default function CustomerEdit({ customer, onUpdate, onClose }) {
             });
 
             if (response.status === 409) {
-                alert("초대코드가 이미 사용 중입니다. 다른 코드를 입력해주세요!");
+                notify.warning("초대코드가 이미 사용 중입니다. 다른 코드를 입력해주세요!");
                 return;
             }
 
             if (!response.ok) {
                 const message = await response.text();
-                alert(message || "수정에 실패했습니다.");
+                notify.error(message || "수정에 실패했습니다.");
                 return;
             }
 
@@ -53,12 +53,12 @@ export default function CustomerEdit({ customer, onUpdate, onClose }) {
             onClose();
         } catch (error) {
             console.error(error);
-            alert("서버 오류가 발생했습니다.");
+            notify.error("서버 오류가 발생했습니다.");
         }
     };
 
     const onInvalid = () => {
-        alert("이름, 등급, 연락처, 코드 입력은 필수이며 코드는 숫자 4자리만 가능합니다.");
+        notify.warning("이름, 등급, 연락처, 코드 입력은 필수이며 코드는 숫자 4자리만 가능합니다.");
     };
 
     return (

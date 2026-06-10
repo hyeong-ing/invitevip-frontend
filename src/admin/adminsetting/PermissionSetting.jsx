@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./PermissionSetting.css";
 import AdminAdd from "./adminfunction/AdminAdd";
 import AdminEdit from "./adminfunction/AdminEdit";
 import AdminSearch from "./adminfunction/AdminSearch.jsx";
 import { authFetch } from "../../auth/authFetch.js";
 import { useAuth } from "../../auth/useAuth.js";
+import { notify } from "../../common/notify.js";
 import Swal from "sweetalert2";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
@@ -16,7 +17,6 @@ import {
 } from "@tanstack/react-table";
 
 const PERMISSION_LABELS = {
-    CUSTOMER_READ: "조회",
     CUSTOMER_SEARCH: "검색",
     CUSTOMER_ADD: "추가",
     CUSTOMER_EDIT: "수정",
@@ -24,24 +24,36 @@ const PERMISSION_LABELS = {
 };
 
 const PERMISSION_ORDER = {
-    CUSTOMER_READ: 1,
-    CUSTOMER_SEARCH: 2,
-    CUSTOMER_ADD: 3,
-    CUSTOMER_EDIT: 4,
-    CUSTOMER_DELETE: 5,
+    CUSTOMER_SEARCH: 1,
+    CUSTOMER_ADD: 2,
+    CUSTOMER_EDIT: 3,
+    CUSTOMER_DELETE: 4,
 };
 
-const fetchAdmins = async (keyword) => {
-    const url = keyword
-        ? `/api/admins/search?keyword=${encodeURIComponent(keyword)}`
-        : "/api/admins";
-    const response = await authFetch(url);
+const ROLE_FILTERS = [
+    { value: "ADMIN", label: "일반관리자" },
+    { value: "SUPER_ADMIN", label: "최고관리자" },
+];
+
+const normalizeAdminList = (data) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.content)) return data.content;
+    if (Array.isArray(data.admins)) return data.admins;
+    if (Array.isArray(data.items)) return data.items;
+
+    throw new Error("관리자 목록 응답 형식이 올바르지 않습니다.");
+};
+
+const fetchAdmins = async () => {
+    const response = await authFetch("/api/admins");
 
     if (!response.ok) {
-        throw new Error(keyword ? "관리자 검색에 실패했습니다." : "관리자 목록을 불러오지 못했습니다.");
+        throw new Error("관리자 목록을 불러오지 못했습니다.");
     }
 
-    return response.json();
+    const data = await response.json();
+
+    return normalizeAdminList(data);
 };
 
 const deleteAdmin = async (id) => {
@@ -62,7 +74,8 @@ export default function PermissionSetting() {
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [selectedAdmin, setSelectedAdmin] = useState(null);
-    const [searchKeyword, setSearchKeyword] = useState("");
+    const [searchRows, setSearchRows] = useState(null);
+    const [selectedRoles, setSelectedRoles] = useState(new Set());
     const [pagination, setPagination] = useState({
         pageIndex: 0,
         pageSize: 10,
@@ -75,14 +88,26 @@ export default function PermissionSetting() {
         error,
         refetch,
     } = useQuery({
-        queryKey: ["admins", searchKeyword],
-        queryFn: () => fetchAdmins(searchKeyword),
+        queryKey: ["admins"],
+        queryFn: fetchAdmins,
         enabled: !auth.loading && auth.superAdmin,
     });
+    const displayedRows = searchRows ?? rows;
+    const filteredRows = useMemo(
+        () =>
+            selectedRoles.size === 0
+                ? displayedRows
+                : displayedRows.filter((admin) => selectedRoles.has(admin.role)),
+        [displayedRows, selectedRoles]
+    );
 
     const deleteMutation = useMutation({
         mutationFn: deleteAdmin,
         onSuccess: (deletedId) => {
+            setSearchRows((oldData) => {
+                if (!Array.isArray(oldData)) return oldData;
+                return oldData.filter((admin) => admin.id !== deletedId);
+            });
             queryClient.setQueriesData({ queryKey: ["admins"] }, (oldData) => {
                 if (!Array.isArray(oldData)) return oldData;
                 return oldData.filter((admin) => admin.id !== deletedId);
@@ -90,7 +115,7 @@ export default function PermissionSetting() {
             queryClient.invalidateQueries({ queryKey: ["admins"] });
         },
         onError: (mutationError) => {
-            alert(mutationError.message || "관리자 삭제 중 오류가 발생했습니다.");
+            notify.error(mutationError.message || "관리자 삭제 중 오류가 발생했습니다.");
         },
     });
     const formatPerms = (permissions) => {
@@ -99,6 +124,7 @@ export default function PermissionSetting() {
         }
 
         return [...permissions]
+            .filter((code) => code !== "CUSTOMER_READ")
             .sort((a, b) => {
                 const orderA = PERMISSION_ORDER[a] || 99;
                 const orderB = PERMISSION_ORDER[b] || 99;
@@ -112,14 +138,25 @@ export default function PermissionSetting() {
         return role === "SUPER_ADMIN" ? "최고관리자" : "일반관리자";
     };
 
+    const toggleRole = (role) => {
+        setSelectedRoles((prev) => {
+            const next = new Set(prev);
+            if (next.has(role)) next.delete(role);
+            else next.add(role);
+            return next;
+        });
+    };
+
     const handleRefresh = () => {
-        setSearchKeyword("");
+        setSearchRows(null);
+        setSelectedRoles(new Set());
         setPagination((prev) => ({ ...prev, pageIndex: 0 }));
         queryClient.invalidateQueries({ queryKey: ["admins"] });
     };
 
     const handleAdd = () => {
-        setSearchKeyword("");
+        setSearchRows(null);
+        setSelectedRoles(new Set());
         setPagination((prev) => ({ ...prev, pageIndex: 0 }));
         queryClient.invalidateQueries({ queryKey: ["admins"] });
     };
@@ -130,17 +167,28 @@ export default function PermissionSetting() {
         setSelectedAdmin(null);
     };
 
-    const handleSearch = (keyword) => {
-        setSearchKeyword(keyword);
-        setIsSearchOpen(false);
-        setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    const handleSearch = async (keyword) => {
+        try {
+            const response = await authFetch(`/api/admins/search?keyword=${encodeURIComponent(keyword)}`);
+
+            if (!response.ok) {
+                throw new Error("관리자 검색에 실패했습니다.");
+            }
+
+            const data = await response.json();
+            setSearchRows(normalizeAdminList(data));
+            setIsSearchOpen(false);
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+        } catch (searchError) {
+            console.error("관리자 검색 오류:", searchError);
+            alert("관리자 검색에 실패했습니다.");
+        }
     };
 
     const handleDelete = async (admin) => {
         const result = await Swal.fire({
-            title: `${admin.username}님의 정보를 삭제하시겠습니까?`,
+            title: `${admin.username}님의 정보를\n삭제하시겠습니까?`,
             icon: "warning",
-            width: "calc(32em + 16px)",
             showCancelButton: true,
             cancelButtonText: "아니오",
             confirmButtonText: "삭제",
@@ -148,6 +196,8 @@ export default function PermissionSetting() {
             cancelButtonColor: "#6b7280",
             reverseButtons: true,
             customClass: {
+                popup: "delete-alert-popup",
+                title: "delete-alert-title",
                 actions: "delete-alert-actions",
             },
         });
@@ -158,6 +208,10 @@ export default function PermissionSetting() {
 
         deleteMutation.mutate(admin.id);
     };
+
+    useEffect(() => {
+        setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    }, [selectedRoles, searchRows]);
 
     const tableColumns = [
         { header: "이름", accessorKey: "name", size: 120 },
@@ -195,7 +249,7 @@ export default function PermissionSetting() {
     ];
 
     const table = useReactTable({
-        data: rows,
+        data: filteredRows,
         columns: tableColumns,
         state: {
             pagination,
@@ -219,10 +273,23 @@ export default function PermissionSetting() {
                 <div className="permission-card">
                     <div className="permission-toolbar">
                         <div className="toolbar-left">
-                            <div className="admin-count">등록된 관리자 수: {rows.length}명</div>
+                            <div className="admin-count">등록된 관리자 수: {filteredRows.length}명 / 전체 {displayedRows.length}명</div>
                             <button className="btn-refresh" onClick={handleRefresh} disabled={isFetching} aria-label="관리자 목록 새로고침">
                                 <RefreshCw size={16} strokeWidth={2.4} />
                             </button>
+                        </div>
+
+                        <div className="role-filters">
+                            {ROLE_FILTERS.map((role) => (
+                                <label className="role-check" key={role.value}>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedRoles.has(role.value)}
+                                        onChange={() => toggleRole(role.value)}
+                                    />
+                                    {role.label}
+                                </label>
+                            ))}
                         </div>
 
                         <div className="btn-group">
@@ -271,7 +338,7 @@ export default function PermissionSetting() {
                                         </button>
                                     </td>
                                 </tr>
-                            ) : rows.length === 0 ? (
+                            ) : filteredRows.length === 0 ? (
                                 <tr className="empty-row">
                                     <td colSpan={tableColumns.length}>표시할 데이터가 없습니다.</td>
                                 </tr>

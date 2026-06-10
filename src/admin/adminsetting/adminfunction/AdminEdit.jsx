@@ -1,10 +1,9 @@
-import React from "react";
 import { useForm } from "react-hook-form";
 import { Save, X } from "lucide-react";
 import { authFetch } from "../../../auth/authFetch.js";
+import { notify } from "../../../common/notify.js";
 
 const PERMISSIONS = [
-    { key: "CUSTOMER_READ", label: "조회" },
     { key: "CUSTOMER_SEARCH", label: "검색" },
     { key: "CUSTOMER_ADD", label: "추가" },
     { key: "CUSTOMER_EDIT", label: "수정" },
@@ -25,7 +24,7 @@ export default function AdminEdit({ admin, onUpdate, onClose }) {
             username: admin.username ?? "",
             password: "",
             role: admin.role ?? "ADMIN",
-            permissions: admin.permissions ?? [],
+            permissions: (admin.permissions ?? []).filter((permission) => permission !== "CUSTOMER_READ"),
         },
     });
 
@@ -41,11 +40,6 @@ export default function AdminEdit({ admin, onUpdate, onClose }) {
     };
 
     const onSubmit = async (formData) => {
-        if (formData.role === "ADMIN" && formData.permissions.length === 0) {
-            alert("일반관리자는 최소 1개 이상의 권한이 필요합니다.");
-            return;
-        }
-
         const payload = {
             name: formData.name,
             username: formData.username,
@@ -66,7 +60,7 @@ export default function AdminEdit({ admin, onUpdate, onClose }) {
 
             if (!response.ok) {
                 const message = await response.text();
-                alert(message || "관리자 수정에 실패했습니다.");
+                notify.error(message || "관리자 수정에 실패했습니다.");
                 return;
             }
 
@@ -75,16 +69,16 @@ export default function AdminEdit({ admin, onUpdate, onClose }) {
             if (onUpdate) {
                 onUpdate(updatedAdmin);
             }
-            alert("수정되었습니다.");
+            notify.success("수정되었습니다.");
             onClose();
         } catch (error) {
             console.error(error);
-            alert("서버 오류가 발생했습니다.");
+            notify.error("서버 오류가 발생했습니다.");
         }
     };
 
     const onInvalid = () => {
-        alert("이름과 아이디는 필수입니다.");
+        notify.warning("이름과 아이디는 필수입니다.");
     };
 
     return (
