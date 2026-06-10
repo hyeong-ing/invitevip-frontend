@@ -59,7 +59,6 @@ export default function CustomerTable() {
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [editingCustomer, setEditingCustomer] = useState(null);
     const [searchRows, setSearchRows] = useState(null);
-    const canRead = auth.superAdmin || auth.customerRead;
     const canSearch = auth.superAdmin || auth.customerSearch;
     const canAdd = auth.superAdmin || auth.customerAdd;
     const canEdit = auth.superAdmin || auth.customerEdit;
@@ -76,7 +75,7 @@ export default function CustomerTable() {
     } = useQuery({
         queryKey: ["customers"],
         queryFn: fetchCustomers,
-        enabled: canRead,
+        enabled: !auth.loading && auth.isAuthenticated,
     });
     const displayedCustomers = searchRows ?? customers;
 

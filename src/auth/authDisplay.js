@@ -1,5 +1,4 @@
 const CUSTOMER_PERMISSIONS = [
-    { key: "customerRead", label: "조회" },
     { key: "customerAdd", label: "추가" },
     { key: "customerSearch", label: "검색" },
     { key: "customerEdit", label: "수정" },
@@ -12,11 +11,11 @@ export function getAdminRoleLabel(auth) {
 
 export function getCustomerPermissionText(auth) {
     const permissions = auth.superAdmin
-        ? CUSTOMER_PERMISSIONS
+        ? [{ label: "전체 권한" }]
         : CUSTOMER_PERMISSIONS.filter((permission) => auth[permission.key]);
 
     if (permissions.length === 0) {
-        return "권한 없음";
+        return "조회 전용";
     }
 
     return permissions.map((permission) => permission.label).join(" | ");

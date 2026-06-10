@@ -17,7 +17,6 @@ import {
 } from "@tanstack/react-table";
 
 const PERMISSION_LABELS = {
-    CUSTOMER_READ: "조회",
     CUSTOMER_SEARCH: "검색",
     CUSTOMER_ADD: "추가",
     CUSTOMER_EDIT: "수정",
@@ -25,12 +24,16 @@ const PERMISSION_LABELS = {
 };
 
 const PERMISSION_ORDER = {
-    CUSTOMER_READ: 1,
-    CUSTOMER_SEARCH: 2,
-    CUSTOMER_ADD: 3,
-    CUSTOMER_EDIT: 4,
-    CUSTOMER_DELETE: 5,
+    CUSTOMER_SEARCH: 1,
+    CUSTOMER_ADD: 2,
+    CUSTOMER_EDIT: 3,
+    CUSTOMER_DELETE: 4,
 };
+
+const ROLE_FILTERS = [
+    { value: "ADMIN", label: "일반관리자" },
+    { value: "SUPER_ADMIN", label: "최고관리자" },
+];
 
 const normalizeAdminList = (data) => {
     if (Array.isArray(data)) return data;
@@ -72,6 +75,7 @@ export default function PermissionSetting() {
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [selectedAdmin, setSelectedAdmin] = useState(null);
     const [searchRows, setSearchRows] = useState(null);
+    const [selectedRoles, setSelectedRoles] = useState(new Set());
     const [pagination, setPagination] = useState({
         pageIndex: 0,
         pageSize: 10,
@@ -89,6 +93,13 @@ export default function PermissionSetting() {
         enabled: !auth.loading && auth.superAdmin,
     });
     const displayedRows = searchRows ?? rows;
+    const filteredRows = React.useMemo(
+        () =>
+            selectedRoles.size === 0
+                ? displayedRows
+                : displayedRows.filter((admin) => selectedRoles.has(admin.role)),
+        [displayedRows, selectedRoles]
+    );
 
     const deleteMutation = useMutation({
         mutationFn: deleteAdmin,
@@ -113,6 +124,7 @@ export default function PermissionSetting() {
         }
 
         return [...permissions]
+            .filter((code) => code !== "CUSTOMER_READ")
             .sort((a, b) => {
                 const orderA = PERMISSION_ORDER[a] || 99;
                 const orderB = PERMISSION_ORDER[b] || 99;
@@ -126,14 +138,25 @@ export default function PermissionSetting() {
         return role === "SUPER_ADMIN" ? "최고관리자" : "일반관리자";
     };
 
+    const toggleRole = (role) => {
+        setSelectedRoles((prev) => {
+            const next = new Set(prev);
+            if (next.has(role)) next.delete(role);
+            else next.add(role);
+            return next;
+        });
+    };
+
     const handleRefresh = () => {
         setSearchRows(null);
+        setSelectedRoles(new Set());
         setPagination((prev) => ({ ...prev, pageIndex: 0 }));
         queryClient.invalidateQueries({ queryKey: ["admins"] });
     };
 
     const handleAdd = () => {
         setSearchRows(null);
+        setSelectedRoles(new Set());
         setPagination((prev) => ({ ...prev, pageIndex: 0 }));
         queryClient.invalidateQueries({ queryKey: ["admins"] });
     };
@@ -186,6 +209,10 @@ export default function PermissionSetting() {
         deleteMutation.mutate(admin.id);
     };
 
+    React.useEffect(() => {
+        setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    }, [selectedRoles, searchRows]);
+
     const tableColumns = [
         { header: "이름", accessorKey: "name", size: 120 },
         { header: "아이디", accessorKey: "username", size: 120 },
@@ -222,7 +249,7 @@ export default function PermissionSetting() {
     ];
 
     const table = useReactTable({
-        data: displayedRows,
+        data: filteredRows,
         columns: tableColumns,
         state: {
             pagination,
@@ -246,10 +273,23 @@ export default function PermissionSetting() {
                 <div className="permission-card">
                     <div className="permission-toolbar">
                         <div className="toolbar-left">
-                            <div className="admin-count">등록된 관리자 수: {displayedRows.length}명</div>
+                            <div className="admin-count">등록된 관리자 수: {filteredRows.length}명 / 전체 {displayedRows.length}명</div>
                             <button className="btn-refresh" onClick={handleRefresh} disabled={isFetching} aria-label="관리자 목록 새로고침">
                                 <RefreshCw size={16} strokeWidth={2.4} />
                             </button>
+                        </div>
+
+                        <div className="role-filters">
+                            {ROLE_FILTERS.map((role) => (
+                                <label className="role-check" key={role.value}>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedRoles.has(role.value)}
+                                        onChange={() => toggleRole(role.value)}
+                                    />
+                                    {role.label}
+                                </label>
+                            ))}
                         </div>
 
                         <div className="btn-group">
@@ -298,7 +338,7 @@ export default function PermissionSetting() {
                                         </button>
                                     </td>
                                 </tr>
-                            ) : displayedRows.length === 0 ? (
+                            ) : filteredRows.length === 0 ? (
                                 <tr className="empty-row">
                                     <td colSpan={tableColumns.length}>표시할 데이터가 없습니다.</td>
                                 </tr>

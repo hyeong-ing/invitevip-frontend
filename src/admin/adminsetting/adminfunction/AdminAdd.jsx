@@ -5,7 +5,6 @@ import { authFetch } from "../../../auth/authFetch.js";
 import { notify } from "../../../common/notify.js";
 
 const PERMISSIONS = [
-    { key: "CUSTOMER_READ", label: "조회" },
     { key: "CUSTOMER_SEARCH", label: "검색" },
     { key: "CUSTOMER_ADD", label: "추가" },
     { key: "CUSTOMER_EDIT", label: "수정" },
@@ -41,11 +40,6 @@ export default function AdminAdd({ onAdd, onClose }) {
     };
 
     const onSubmit = async (form) => {
-        if (form.role === "ADMIN" && form.permissions.length === 0) {
-            notify.warning("일반 관리자는 최소 1개 이상의 권한이 필요합니다.");
-            return;
-        }
-
         const payload = {
             ...form,
             permissions: form.role === "SUPER_ADMIN" ? [] : form.permissions,

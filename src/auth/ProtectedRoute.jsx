@@ -24,7 +24,6 @@ export default function ProtectedRoute({ children, requiredRole, requireCustomer
     if (requireCustomerAccess) {
         const canAccessCustomerPage =
             auth.superAdmin ||
-            auth.customerRead ||
             auth.customerSearch ||
             auth.customerAdd ||
             auth.customerEdit ||
