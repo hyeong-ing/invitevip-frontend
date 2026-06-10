@@ -1,4 +1,3 @@
-import React from "react";
 import PageHeader from "../../common/PageHeader.jsx";
 import PermissionSetting from "./PermissionSetting.jsx";
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./PermissionSetting.css";
 import AdminAdd from "./adminfunction/AdminAdd";
 import AdminEdit from "./adminfunction/AdminEdit";
@@ -93,7 +93,7 @@ export default function PermissionSetting() {
         enabled: !auth.loading && auth.superAdmin,
     });
     const displayedRows = searchRows ?? rows;
-    const filteredRows = React.useMemo(
+    const filteredRows = useMemo(
         () =>
             selectedRoles.size === 0
                 ? displayedRows
@@ -209,7 +209,7 @@ export default function PermissionSetting() {
         deleteMutation.mutate(admin.id);
     };
 
-    React.useEffect(() => {
+    useEffect(() => {
         setPagination((prev) => ({ ...prev, pageIndex: 0 }));
     }, [selectedRoles, searchRows]);
 

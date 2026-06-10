@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./CustomerTable.css";
 import CustomerAdd from "./customerfunction/CustomerAdd.jsx";
 import CustomerSearch from "./customerfunction/CustomerSearch.jsx";

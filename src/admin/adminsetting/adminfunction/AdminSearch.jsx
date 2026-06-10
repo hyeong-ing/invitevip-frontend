@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import "../PermissionSetting.css";
 
 export default function AdminSearch({ onClose, onSearch }) {

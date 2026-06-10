@@ -1,4 +1,3 @@
-import React from "react";
 import CustomerTable from "./CustomerTable";
 import PageHeader from "../common/PageHeader.jsx";
 
