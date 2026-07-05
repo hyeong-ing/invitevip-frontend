@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import keycloak from "../keycloak.js";
-import {authFetch} from "./authFetch.js";
+import { AUTH_TOKEN_REFRESH_FAILED_EVENT, authFetch } from "./authFetch.js";
 import { AuthContext } from "./AuthContext.js";
 
 const EMPTY_AUTH = {
@@ -66,6 +66,17 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         loadMe();
     }, [loadMe]);
+
+    useEffect(() => {
+        const resetAuth = () => {
+            setAuthState(EMPTY_AUTH);
+        };
+
+        window.addEventListener(AUTH_TOKEN_REFRESH_FAILED_EVENT, resetAuth);
+        return () => {
+            window.removeEventListener(AUTH_TOKEN_REFRESH_FAILED_EVENT, resetAuth);
+        };
+    }, []);
 
     const value = useMemo(
         () => ({

@@ -73,7 +73,7 @@ export default function AdminAdd({ onAdd, onClose }) {
     return (
         <div className="add-back">
             <div className="add-card">
-                <h3 className="add-title">회원 정보 추가</h3>
+                <h3 className="add-title">관리자 정보 추가</h3>
 
                 <form className="add-form" onSubmit={handleSubmit(onSubmit, onInvalid)}>
                     <div className="form-row">

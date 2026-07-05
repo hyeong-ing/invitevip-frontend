@@ -118,6 +118,7 @@ export default function PermissionSetting() {
             notify.error(mutationError.message || "관리자 삭제 중 오류가 발생했습니다.");
         },
     });
+
     const formatPerms = (permissions) => {
         if (!Array.isArray(permissions)) {
             return "";
