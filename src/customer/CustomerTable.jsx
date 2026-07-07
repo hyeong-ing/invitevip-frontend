@@ -168,7 +168,19 @@ export default function CustomerTable() {
         queryClient.invalidateQueries({ queryKey: ["customers"] });
     };
 
-    const handleUpdate = () => {
+    const handleUpdate = (updatedCustomer) => {
+        setSearchRows((oldData) => {
+            if (!Array.isArray(oldData)) return oldData;
+            return oldData.map((customer) =>
+                customer.id === updatedCustomer.id ? updatedCustomer : customer
+            );
+        });
+        queryClient.setQueriesData({ queryKey: ["customers"] }, (oldData) => {
+            if (!Array.isArray(oldData)) return oldData;
+            return oldData.map((customer) =>
+                customer.id === updatedCustomer.id ? updatedCustomer : customer
+            );
+        });
         queryClient.invalidateQueries({ queryKey: ["customers"] });
     };
 
