@@ -71,26 +71,26 @@
 <br/><br/>
 
 ### 🔶 핵심 로직
-1) 초대코드 검증 및 등급별 페이지 이동 <br/>
-사용자가 4자리 초대코드를 입력하면 백엔드에서 DB에 저장된 초대코드와 일치하는 고객을 조회합니다.
+1) 초대코드 입력 후 등급별 페이지 이동 <br/>
+사용자가 초대코드를 입력하면 백엔드에 코드를 전송하고 응답으로 받은 고객 등급에 따라 안내 페이지를 이동합니다.
 
-+ 초대코드는 InviteCode 값 객체를 통해 숫자 4자리인지 검증합니다.
-+ 유효한 코드라면 고객 정보를 반환합니다.
-+ 그리고 프론트엔드에서 고객 등급에 따라 VIP, VVIP, DIAMOND 페이지로 이동합니다.
++ 초대코드를 입력하면 /api/invite/enter API를 호출합니다.
++ 백엔드에서 고객 정보를 찾으면 등급을 확인합니다.
++ `VIP`, `VVIP`, `DIAMOND` 등급에 따라 각 페이지로 이동합니다.
 
-```java
-public Optional<CustomerResponse> findByCode(String code) {
-    if (!InviteCode.isValid(code)) {
-        return Optional.empty();
-    }
+```javascript
+const response = await fetch(`${API_BASE_URL}/api/invite/enter`, {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ code }),
+});
 
-    return customerRepository.findByInviteCode(InviteCode.of(code))
-            .map(customerService::toResponse);
-}
+const data = await response.json();
+const grade = (data.grade || "").trim().toUpperCase();
 ```
 ```javascript
-const grade = (data.grade || "").trim().toUpperCase();
-
 if (grade === "VIP") navigate("/vip");
 else if (grade === "VVIP") navigate("/vvip");
 else if (grade === "DIAMOND") navigate("/diamond");
@@ -100,23 +100,50 @@ else if (grade === "DIAMOND") navigate("/diamond");
 
 ----
 
-2) 고객 등록∙수정 시 초대코드 중복 방지 <br/>
-고객을 등록하거나 수정할 때 동일한 초대코드가 저장되지 않도록 검증했습니다.
+2) TanStack Query 기반 고객 목록 조회 및 화면 갱신<br/>
+고객 관리 화면에서는 TanStack Query를 사용해 서버의 고객 목록을 조회하고 등록, 수정, 삭제 후 화면 데이터가 갱신됩니다.
 
-+ 등록 시에는 같은 초대코드가 이미 존재하는지 확인합니다.
-+ 수정 시에는 자기 자신의 기존 코드만 허용하고 다른 고객이 사용하는 코드만 중복으로 판단합니다.
-+ DB에서는 `code` 컬럼에 unique 제약 조건을 두어 한 번 더 중복을 방지했습니다.
++ 고객 목록 조회는 `useQuery`로 관리했습니다. 
++ 고객 추가, 수정, 삭제 후에는 고객 목록 쿼리를 다시 불러와 최신 데이터를 화면에 반영했습니다.
++ API 요청 상태와 화면 데이터를 분리해 관리했습니다.
 
-```java
-if (customerRepository.existsByInviteCode(inviteCode)) {
-    throw new DuplicateCodeException("초대코드가 중복되었습니다.");
-}
+```javascript
+const {
+    data: customers = [],
+    isLoading,
+    isError,
+} = useQuery({
+    queryKey: ["customers"],
+    queryFn: fetchCustomers,
+});
 ```
-```java
-customerRepository.findByInviteCode(newInviteCode).ifPresent(found -> {
-    if (!found.getId().equals(id)) {
-        throw new DuplicateCodeException("초대코드가 중복되었습니다.");
-    }
+```javascript
+const addMutation = useMutation({
+    mutationFn: addCustomer,
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["customers"] });
+        notify.success("고객이 등록되었습니다.");
+        onClose();
+    },
+});
+```
+```javascript
+const editMutation = useMutation({
+    mutationFn: updateCustomer,
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["customers"] });
+        notify.success("고객 정보가 수정되었습니다.");
+        onClose();
+    },
+});
+```
+```javascript
+const deleteMutation = useMutation({
+    mutationFn: deleteCustomer,
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["customers"] });
+        notify.success("고객이 삭제되었습니다.");
+    },
 });
 ```
 
@@ -124,122 +151,117 @@ customerRepository.findByInviteCode(newInviteCode).ifPresent(found -> {
 
 ----
 
-3) MySQL 저장 후 Elasticsearch 검색 인덱스 함께 반영 <br/>
-고객 원본 데이터는 MySQL에 저장하고, 검색에 사용할 데이터는 Elasticsearch 인덱스에도 함께 반영했습니다.
+3) Keycloak 초기화 및 전역 인증 상태 구성 <br/>
+프론트엔드 앱이 시작될 때 Keycloak을 먼저 초기화하고, 이후 React 앱을 렌더링하도록 구성했습니다.
 
-+ 고객 등록 시 MySQL에 고객 정보를 저장합니다.
-+ 저장된 고객 정보를 검색용 Entity로 변환해 Elasticsearch에도 저장합니다.
-+ 고객 수정∙삭제 시에도 Elasticsearch 데이터를 함께 갱신하거나 삭제해 검색 결과가 최신 상태를 유지하도록 했습니다.
++ `keycloak-js`를 통해 로그인 상태를 확인합니다.
++ `AuthProvider`에서 현재 로그인 사용자의 권한 정보를 불러옵니다.
++ 전체 앱에서 인증 상태를 사용할 수 있도록 Context로 관리했습니다.
 
-```java
-Customer saved = customerRepository.save(customer);
-
-customerSearchRepository.save(
-        customerSearchMapper.toSearchEntity(saved));
+```javascript
+keycloak.init({ onLoad: "check-sso" })
+    .then(() => {
+        root.render(
+            <QueryClientProvider client={queryClient}>
+                <AuthProvider>
+                    <App />
+                </AuthProvider>
+            </QueryClientProvider>
+        );
+    });
 ```
-```java
-customer.update(
-        request.getName(),
-        request.getGrade(),
-        request.getPhone(),
-        newInviteCode,
-        request.getNote()
-);
+```javascript
+useEffect(() => {
+    async function loadMe() {
+        const data = await authFetch("/api/auth/me");
 
-customerSearchRepository.save(
-        customerSearchMapper.toSearchEntity(customer)
-);
-```
-```java
-customerRepository.delete(customer);
-customerSearchRepository.deleteById(id);
-```
-
-<br/><br/>
-
-----
-
-4) Elasticsearch 기반 고객 검색 및 초성 검색 <br/>
-고객명, 등급, 연락처, 초대코드, 메모를 검색할 수 있도록 Elasticsearch를 사용했습니다.
-
-+ name, note는 한글 검색을 고려해 analyzer를 적용했습니다.
-+ 고객 이름에서 초성을 추출해 nameChosung 필드에 저장했습니다.
-+ 예를 들어 홍길동은 ㅎㄱㄷ으로 저장되어 초성 검색이 가능합니다.
-+ 아래 코드는 검색 조건 중 핵심 부분을 발췌한 예시입니다.
-
-```java
-public CustomerSearchEntity toSearchEntity(Customer customer) {
-    CustomerSearchEntity entity = new CustomerSearchEntity();
-
-    entity.setId(customer.getId());
-    entity.setName(customer.getName());
-    entity.setGrade(customer.getGrade());
-    entity.setPhone(customer.getPhone());
-    entity.setCode(customer.getCode());
-    entity.setNote(customer.getNote());
-    entity.setNameChosung(getChosung(customer.getName()));
-
-    return entity;
-}
-```
-```java
-if (c >= '가' && c <= '힣') {
-    int uniVal = c - 0xAC00;
-    int choIdx = uniVal / 588;
-    sb.append(cho[choIdx]);
-}
-```
-```java
-@Query("""
-{
-  "bool": {
-    "should": [
-      { "match": { "name": "?0" } },
-      { "match": { "note": "?0" } },
-      { "wildcard": { "grade": { "value": "*?0*" } } },
-      { "wildcard": { "phone": { "value": "*?0*" } } },
-      { "wildcard": { "code": { "value": "*?0*" } } },
-      { "wildcard": { "nameChosung": { "value": "*?0*" } } }
-    ],
-    "minimum_should_match": 1
-  }
-}
-""")
-List<CustomerSearchEntity> searchAll(String keyword);
-```
-
-<br/><br/>
-
-----
-
-5) JWT 인증 정보와 DB 권한을 결합한 권한 제어 <br/>
-Keycloak에서 발급받은 JWT를 Spring Security Resource Server가 검증하고 <br/>
-DB에 저장된 관리자 권한을 함께 읽어 API 접근 권한을 제어했습니다.
-
-+ JWT의 realm role과 DB에 저장된 관리자 role을 Spring Security 권한 형식인 ROLE_ADMIN, ROLE_SUPER_ADMIN으로 사용합니다.
-+ DB의 관리자 권한을 조회해 CUSTOMER_SEARCH, CUSTOMER_ADD, CUSTOMER_EDIT, CUSTOMER_DELETE 권한으로 변환합니다.
-+ Controller에서는 @PreAuthorize를 사용해 API별 접근 권한을 분리했습니다.
-
-```java
-authorities.addAll(extractRealmRoles(jwt));
-authorities.addAll(adminAuthorityService.loadAuthorities(jwt));
-```
-```java
-if (admin.getRole() != null) {
-    authorities.add(new SimpleGrantedAuthority("ROLE_" + admin.getRole().name()));
-}
-
-for (AdminPermission adminPermission : admin.getAdminPermissions()) {
-    Permission permission = adminPermission.getPermission();
-
-    if (permission == null || permission.getCode() == null) {
-        continue;
+        setAuthState({
+            authenticated: true,
+            username: data.username,
+            roles: data.roles,
+            permissions: data.permissions,
+        });
     }
 
-    authorities.add(new SimpleGrantedAuthority(
-            permission.getCode().trim().toUpperCase()
-    ));
+    if (keycloak.authenticated) {
+        loadMe();
+    }
+}, []);
+```
+
+
+<br/><br/>
+
+----
+
+4) JWT를 포함한 인증 API 요청 처리 <br/>
+백엔드의 인증이 필요한 API를 호출할 때는 Keycloak에서 발급받은 JWT를 요청 헤더에 포함했습니다.
+
++ API 요청 전 `updateToken()`으로 토큰 갱신을 시도합니다.
++ 요청 헤더에 `Authorization: Bearer Token`을 추가합니다.
++ 토큰 갱신에 실패하면 인증 상태를 초기화할 수 있도록 처리했습니다.
+
+```javascript
+await keycloak.updateToken(30);
+
+const headers = {
+    ...options.headers,
+    Authorization: `Bearer ${keycloak.token}`,
+};
+
+return fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+});
+```
+```javascript
+catch (error) {
+    keycloak.clearToken();
+    window.dispatchEvent(new Event("auth-token-refresh-failed"));
+    throw error;
 }
+```
+
+<br/><br/>
+
+----
+
+5) 로그인 여부와 권한에 따른 페이지 접근 제어 <br/>
+관리자 페이지와 권한 설정 페이지는 로그인 상태와 역할에 따라 접근할 수 있도록 분리했습니다.
+
++ 로그인하지 않은 사용자는 보호된 페이지에 접근할 수 없습니다.
++ 특정 페이지는 `SUPER_ADMIN` 역할을 가진 사용자만 접근할 수 있습니다.
++ 권한이 없는 사용자가 직접 URL로 접근하는 상황을 막았습니다.
+
+```javascript
+if (!authState.authenticated) {
+    return <Navigate to="/login" replace />;
+}
+
+if (requiredRole && !authState.roles.includes(requiredRole)) {
+    return <Navigate to="/" replace />;
+}
+
+return children;
+```
+```javascript
+<Route
+    path="/admin/customers"
+    element={
+        <ProtectedRoute>
+            <CustomerPage />
+        </ProtectedRoute>
+    }
+/>
+
+<Route
+    path="/permission"
+    element={
+        <ProtectedRoute requiredRole="SUPER_ADMIN">
+            <PermissionPage />
+        </ProtectedRoute>
+    }
+/>
 ```
 
 
