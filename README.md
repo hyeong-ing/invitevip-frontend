@@ -270,164 +270,82 @@ return children;
 
 ### 🔶 문제 해결
 
-### [ 관리자 권한 다대다 관계 설계와 중복 저장 방지 ] <br/>
+### [ 검색 상태에서 고객 수정 후 화면 미반영 문제 ] <br/>
 
 1) 문제 발생 <br/>
-+ 한 명의 관리자가 여러 권한을 가질 수 있고 하나의 권한도 여러 관리자에게 부여될 수 있는 구조가 필요했습니다.
-+ 관계형 DB에서는 다대다 관계를 직접 관리하기 어렵고 권한 추가, 삭제 흐름도 명확하게 보이지 않았습니다.
-+ 또한 같은 관리자에게 같은 권한이 중복 저장될 수 있는 문제가 있었습니다.
++ 고객 검색 결과 화면에서 고객 정보를 수정했습니다.
++ 수정 요청은 성공했지만 화면에는 이전 데이터가 여전히 남아있었습니다.
 
 <br/><br/>
 
 2) 원인 파악 <br/>
-+ Admin과 Permission은 다대다 관계이지만, @ManyToMany를 직접 사용하면 중간 테이블을 객체로 다루기 어렵습니다.
-+ 권한 연결 자체를 명확히 관리하고, 추후 필드 확장 가능성도 고려해야 했습니다.
++ 기본 고객 목록은 TanStack Query로 관리하고 있었습니다.
++ 그러나 검색 결과는 별도 상태인 `searchRows`로 관리하고 있었습니다.
++ 수정 성공 후 기본 목록만 갱신하고 현재 화면에 표시 중인 `searchRows`는 갱신하지 않아 발생한 문제였습니다.
 
 <br/><br/>
 
 3) 문제 해결 <br/>
-+ AdminPermission 중간 엔티티를 만들어 관리자와 권한의 연결을 직접 관리했습니다.
-+ admin_id, permission_id 조합에 unique 제약을 두어 중복 저장을 방지했습니다.
-+ orphanRemoval = true를 사용해 권한 목록에서 제거된 연결 데이터가 DB에서도 삭제되도록 처리했습니다.
++ 수정된 고객 데이터를 부모 컴포넌트로 전달했습니다.
++ 이후 searchRows와 TanStackQuery 캐시를 함께 갱신해 검색 화면에서도 수정 결과가 바로 반영되도록 했습니다.
   
-```java
-@Table(
-    name = "admin_permission",
-    uniqueConstraints = @UniqueConstraint(
-        name = "uk_admin_permission",
-        columnNames = {"admin_id", "permission_id"}
-    )
-)
-public class AdminPermission {
-    // ...
-}
-```
-```java
-@OneToMany(
-    mappedBy = "admin",
-    cascade = CascadeType.ALL,
-    orphanRemoval = true
-)
-private Set<AdminPermission> adminPermissions = new LinkedHashSet<>();
-```
-```java
-admin.getAdminPermissions().removeIf(adminPermission -> {
-    Permission permission = adminPermission.getPermission();
+```javascript
+setSearchRows((oldData) => {
+    if (!Array.isArray(oldData)) return oldData;
 
-    return permission == null
-            || permission.getCode() == null
-            || !requestedCodes.contains(permission.getCode());
+    return oldData.map((customer) =>
+        customer.id === updatedCustomer.id ? updatedCustomer : customer
+    );
+});
+queryClient.setQueriesData({ queryKey: ["customers"] }, (oldData) => {
+    if (!Array.isArray(oldData)) return oldData;
+
+    return oldData.map((customer) =>
+        customer.id === updatedCustomer.id ? updatedCustomer : customer
+    );
 });
 ```
-```java
-if (existingCodes.contains(permission.getCode())) {
-    continue;
-}
-
-AdminPermission adminPermission = new AdminPermission();
-adminPermission.setAdmin(admin);
-adminPermission.setPermission(permission);
-admin.getAdminPermissions().add(adminPermission);
-```
 
 <br/><br/>
 
-### [ MySQL과 Elasticsearch 검색 인덱스 불일치 문제 ] <br/>
+### [ 인증 API 요청과 토큰 갱신 실패 공통 처리 ] <br/>
 
 1) 문제 발생 <br/>
-+ 고객 원본 데이터는 MySQL에 저장하고, 검색 데이터는 Elasticsearch에 저장했습니다.
-+ 고객 정보가 변경되었을 때 Elasticsearch 인덱스가 함께 갱신되지 않으면 검색 결과가 실제 DB와 달라질 수 있었습니다.
++ Keycloak 로그인 후에도 백엔드 보호 API 요청에 JWT가 포함되지 않으면 인증 요청으로 처리되지 않는 문제가 발생했습니다.
++ 또한 토큰 갱신 실패 시 로그인 상태가 화면에 남아 있을 수 있었습니다.
 
 <br/><br/>
 
 2) 원인 파악 <br/>
-+ MySQL과 Elasticsearch는 서로 다른 저장소이기 때문에, MySQL 저장만으로 Elasticsearch 데이터가 자동 변경되지 않습니다.
-+ 고객 등록, 수정, 삭제 시점에 검색 인덱스도 함께 반영해야 했습니다.
++ Keycloak 로그인 상태와 백엔드 API 요청은 별개의 과정이었습니다.
++ 백엔드에서 사용자를 인증하려면 요청 헤더에 `Authorization: Bearer Token`을 포함해야 했습니다.
 
 <br/><br/>
 
 3) 문제 해결 <br/>
-+ 고객 등록 / 수정 / 삭제 시 Elasticsearch 인덱스도 함께 저장하거나 삭제하도록 처리했습니다.
-+ MySQL 기준 고객 데이터를 Elasticsearch에 다시 반영할 수 있는 수동 동기화 API도 추가했습니다.
++ 공통 요청 함수인 `authFetch`를 만들고 API 요청 전에 토큰 갱신과 JWT 헤더 추가를 처리했습니다.
++ 토큰 갱신에 실패하면 토큰을 비우고 공통 이벤트를 발생시켜 인증 상태를 초기화하도록 했습니다.
   
-```java
-Customer saved = customerRepository.save(customer);
-
-customerSearchRepository.save(
-        customerSearchMapper.toSearchEntity(saved)
-);
-```
-```java
-customer.update(
-        request.getName(),
-        request.getGrade(),
-        request.getPhone(),
-        newInviteCode,
-        request.getNote()
-);
-
-customerSearchRepository.save(
-        customerSearchMapper.toSearchEntity(customer)
-);
-```
-```java
-customerRepository.delete(customer);
-customerSearchRepository.deleteById(id);
-```
-```java
-@PostMapping("/sync")
-@PreAuthorize("hasRole('SUPER_ADMIN')")
-public ResponseEntity<String> sync() {
-    customerService.syncAllToElasticsearch();
-    return ResponseEntity.ok("sync ok");
+```javascript
+try {
+    if (keycloak.authenticated) {
+        await keycloak.updateToken(30);
+    }
+} catch (error) {
+    keycloak.clearToken();
+    window.dispatchEvent(new Event(AUTH_TOKEN_REFRESH_FAILED_EVENT));
+    throw new Error("로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
 }
-```
+const headers = new Headers(options.headers || {});
 
-<br/><br/>
-
-### [ MySQL과 Keycloak 관리자 계정 불일치 문제 ] <br/>
-
-1) 문제 발생 <br/>
-+ 관리자 정보는 MySQL에 저장하고, 실제 로그인 계정은 Keycloak에 생성했습니다.
-+ 둘 중 하나만 반영되면 DB에는 있지만 로그인할 수 없거나, 로그인은 되지만 서비스 권한을 조회할 수 없는 문제가 생길 수 있었습니다.
-
-<br/><br/>
-
-2) 원인 파악 <br/>
-+ MySQL과 Keycloak은 서로 다른 시스템이기 때문에 하나의 트랜잭션으로 자동 처리되지 않습니다.
-+ Keycloak 계정과 MySQL 관리자 데이터를 연결할 식별값도 필요했습니다.
-
-<br/><br/>
-
-3) 문제 해결 <br/>
-+ 관리자 생성 시 saveAndFlush()로 DB insert와 제약 조건 검사를 먼저 실행한 뒤 Keycloak 사용자 생성을 진행했습니다.
-+ 생성된 Keycloak 사용자 id를 admin.keycloakId에 저장해 MySQL 관리자와 Keycloak 계정을 연결했습니다.
-+ 관리자 수정 / 삭제 시에도 MySQL 데이터와 Keycloak 사용자 계정을 함께 반영하도록 처리했습니다.
-  
-```java
-Admin savedAdmin = adminRepository.saveAndFlush(admin);
-
-String keycloakId = createKeycloakUser(request);
-savedAdmin.setKeycloakId(keycloakId);
-
-adminRepository.flush();
-```
-```java
-adminRepository.flush();
-updateKeycloakUser(admin, oldUsername, request);
-```
-```java
-String keycloakId = getKeycloakId(admin, admin.getUsername());
-
-adminRepository.delete(admin);
-adminRepository.flush();
-
-deleteKeycloakUser(keycloakId);
-```
-```java
-if (admin.getKeycloakId() == null || admin.getKeycloakId().isBlank()) {
-    admin.setKeycloakId(keycloakId);
+if (keycloak.token) {
+    headers.set("Authorization", `Bearer ${keycloak.token}`);
 }
+
+return fetch(url, {
+    ...options,
+    headers,
+});
 ```
 
 <br/><br/><br/>
