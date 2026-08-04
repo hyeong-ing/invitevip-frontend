@@ -25,7 +25,7 @@
 
 + [Blog (프로젝트 기록)](https://post-this.tistory.com/category/%F0%9F%92%BB%20%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8/%F0%9F%90%A0%ED%9A%8C%EC%9B%90%EA%B0%80%EC%9E%85%20%ED%8E%98%EC%9D%B4%EC%A7%80%F0%9F%90%A0)
 + YouTube (동작화면)
-+ [Figma (다이어그램)](https://www.figma.com/board/pcWxgbFCWQUnnIW3W1hrZi/%ED%9A%8C%EC%9B%90%EA%B0%80%EC%9E%85-%EB%A1%9C%EA%B7%B8%EC%9D%B8-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8?node-id=0-1&t=NPUJ2hrnFEb7meeQ-1)
++ [Figma (다이어그램)](https://www.figma.com/board/ymjJijKbxc8MZPF4UT8Ysn/Invite-and-Management?node-id=0-1&t=RE8pZSuCVea9F2X6-1)
 
 
 <br/>
@@ -38,17 +38,18 @@
 
 <p align="center">
 
-  <img width="800" height="500" alt="스크린샷 2026-07-03 오후 8 56 27" src="https://github.com/user-attachments/assets/89561780-116a-4091-9e56-ec9c44c8152f" />
+  <img width="1000" height="500" alt="스크린샷 2026-07-03 오후 8 56 27" src="https://github.com/user-attachments/assets/1c970f5a-b9bf-4415-97db-2189df8f5795" />
 
 </p>
 
 <br/>
 
-+ 사용자가 입력한 정보로 일반 회원가입을 진행합니다. 
-+ 아이디와 이메일 중복 확인을 통해 이미 등록된 회원인지 검증합니다.
-+ H2 데이터베이스로 회원 정보를 저장합니다.
-+ BCryptPasswordEncoder를 사용해 비밀번호를 암호화하여 저장합니다.
-+ 카카오와 네이버 OAuth API를 연동해 소셜 로그인 흐름을 구현했습니다.
++ 사용자는 초대코드를 입력해 고객 등급별 안내 페이지로 이동합니다.
++ 관리자는 Keycloak 로그인을 통해 인증을 진행하고 JWT를 포함해 백엔드 API를 호출합니다.
++ 백엔드는 Spring Security로 JWT와 권한을 검증한 뒤 고객 관리, 초대코드 검증, 관리자 권한 관리 로직을 처리합니다.
++ 고객 / 관리자 / 권한 데이터는 MySQL에 저장하고 고객 검색 데이터는 Elasticsearch에 저장해 검색 기능에 활용합니다.
++ Keycloak Admin Client를 사용해 서비스 관리자 정보와 Keycloak 로그인 계정을 함께 관리합니다.
+
 
 <br/><br/> 
 
