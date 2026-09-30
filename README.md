@@ -46,7 +46,7 @@
 
 + 사용자는 초대코드를 입력해 고객 등급별 안내 페이지로 이동합니다.
 + 관리자는 Keycloak 로그인을 통해 인증을 진행하고 JWT를 포함해 백엔드 API를 호출합니다.
-+ 백엔드는 Spring Security로 JWT와 권한을 검증한 뒤 고객 관리, 초대코드 검증, 관리자 권한 관리 로직을 처리합니다.
++ 초대코드 확인은 로그인 없이 사용할 수 있습니다. 고객 관리와 관리자 권한 관리 API는 Spring Security로 JWT와 권한을 검증합니다.
 + 고객 / 관리자 / 권한 데이터는 MySQL에 저장하고 고객 검색 데이터는 Elasticsearch에 저장해 검색 기능에 활용합니다.
 + Keycloak Admin Client를 사용해 서비스 관리자 정보와 Keycloak 로그인 계정을 함께 관리합니다.
 
@@ -59,12 +59,12 @@
 + 서버 상태 관리 : TanStack Query
 + 테이블 관리 : TanStack Table
 + 인증 연동 : keycloak-js
-+ 알림 UI : Sonner
++ 알림 UI : React Toastify, SweetAlert2
   
 <br/><br/>
 
 ### 🔶 프로젝트 목표
-+ 첫 React 프로젝트로 컴포넌트 기반 화면구성과 상태 관리 흐름 이해하기.
++ 첫 React 프로젝트로 컴포넌트 기반 화면 구성과 상태 관리 흐름 이해하기.
 + 백엔드 API와 연동되는 프론트엔드 구조를 설계하고 서버 데이터를 화면에 반영하는 흐름 경험하기.
 + Keycloak 인증 흐름을 프론트엔드와 연결하고 로그인 상태에 따라 화면 접근을 제어하기.
 + 관리자 페이지에 필요한 목록 조회, 입력 화면 등 기본적인 관리형 UI 구현하기.
@@ -78,23 +78,38 @@
 + 초대코드를 입력하면 /api/invite/enter API를 호출합니다.
 + 백엔드에서 고객 정보를 찾으면 등급을 확인합니다.
 + `VIP`, `VVIP`, `DIAMOND` 등급에 따라 각 페이지로 이동합니다.
++ 현재 등급별 안내 페이지는 주소를 직접 입력해도 접근할 수 있으며, 페이지 자체의 접근 제한은 구현하지 않았습니다.
+
+아래는 초대코드를 전송하고 응답에 따라 이동하는 부분을 발췌한 코드입니다.
 
 ```javascript
-const response = await fetch(`${API_BASE_URL}/api/invite/enter`, {
+const res = await fetch ("/api/invite/enter", {
     method: "POST",
-    headers: {
-        "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ code }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: code }),
 });
 
-const data = await response.json();
+if (!res.ok) {
+    setMsg("코드를 다시 확인해주시겠습니까?");
+    setDigits(["", "", "", ""]);
+    inputRefs.current[0]?.focus();
+    setLoading(false);
+    return;
+}
+
+const data = await res.json();
+notify.success(`${data.name}님 환영합니다.`);
 const grade = (data.grade || "").trim().toUpperCase();
-```
-```javascript
-if (grade === "VIP") navigate("/vip");
-else if (grade === "VVIP") navigate("/vvip");
-else if (grade === "DIAMOND") navigate("/diamond");
+
+if (grade === "VIP") {
+    navigate("/vip");
+} else if (grade === "VVIP") {
+    navigate("/vvip");
+} else if (grade === "DIAMOND") {
+    navigate("/diamond");
+} else {
+    setMsg("등급 에러");
+}
 ```
 
 <br/><br/>
@@ -102,50 +117,34 @@ else if (grade === "DIAMOND") navigate("/diamond");
 ----
 
 2) TanStack Query 기반 고객 목록 조회 및 화면 갱신<br/>
-고객 관리 화면에서는 TanStack Query를 사용해 서버의 고객 목록을 조회하고 등록, 수정, 삭제 후 화면 데이터가 갱신됩니다.
+고객 목록은 TanStack Query로 조회하고, 검색 결과는 별도 상태인 `searchRows`로 관리했습니다.
 
-+ 고객 목록 조회는 `useQuery`로 관리했습니다. 
-+ 고객 추가, 수정, 삭제 후에는 고객 목록 쿼리를 다시 불러와 최신 데이터를 화면에 반영했습니다.
-+ API 요청 상태와 화면 데이터를 분리해 관리했습니다.
++ 고객 등록과 수정은 각 입력 화면에서 API를 호출하고, 성공한 결과를 부모 컴포넌트에 전달합니다.
++ 등록 후에는 검색 상태를 해제하고 기본 고객 목록을 다시 조회합니다.
++ 수정 후에는 검색 결과와 저장된 목록 데이터를 먼저 바꾸고, 기본 목록도 다시 조회합니다.
++ 삭제는 `useMutation`으로 처리하며, 성공하면 검색 결과와 목록에서 해당 고객을 제거하고 기본 목록을 다시 조회합니다.
++ 아래는 목록 조회와 등록 후 갱신 부분을 발췌한 코드입니다.
 
 ```javascript
 const {
     data: customers = [],
     isLoading,
+    isFetching,
     isError,
+    error,
+    refetch,
 } = useQuery({
     queryKey: ["customers"],
     queryFn: fetchCustomers,
+    enabled: !auth.loading && auth.isAuthenticated,
 });
 ```
 ```javascript
-const addMutation = useMutation({
-    mutationFn: addCustomer,
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["customers"] });
-        notify.success("고객이 등록되었습니다.");
-        onClose();
-    },
-});
-```
-```javascript
-const editMutation = useMutation({
-    mutationFn: updateCustomer,
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["customers"] });
-        notify.success("고객 정보가 수정되었습니다.");
-        onClose();
-    },
-});
-```
-```javascript
-const deleteMutation = useMutation({
-    mutationFn: deleteCustomer,
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["customers"] });
-        notify.success("고객이 삭제되었습니다.");
-    },
-});
+const handleAdd = () => {
+    setSearchRows(null);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    queryClient.invalidateQueries({ queryKey: ["customers"] });
+};
 ```
 
 <br/><br/>
@@ -159,35 +158,28 @@ const deleteMutation = useMutation({
 + `AuthProvider`에서 현재 로그인 사용자의 권한 정보를 불러옵니다.
 + 전체 앱에서 인증 상태를 사용할 수 있도록 Context로 관리했습니다.
 
-```javascript
-keycloak.init({ onLoad: "check-sso" })
-    .then(() => {
-        root.render(
-            <QueryClientProvider client={queryClient}>
-                <AuthProvider>
-                    <App />
-                </AuthProvider>
-            </QueryClientProvider>
-        );
-    });
-```
-```javascript
-useEffect(() => {
-    async function loadMe() {
-        const data = await authFetch("/api/auth/me");
+아래는 `/api/auth/me` 응답을 읽고 인증 상태에 저장하는 부분입니다.
 
-        setAuthState({
-            authenticated: true,
-            username: data.username,
-            roles: data.roles,
-            permissions: data.permissions,
-        });
-    }
+```javascript
+const response = await authFetch("/api/auth/me");
 
-    if (keycloak.authenticated) {
-        loadMe();
-    }
-}, []);
+if (!response.ok) {
+    throw new Error("권한 정보를 불러오지 못했습니다.");
+}
+
+const data = await response.json();
+
+setAuthState({
+    loading: false,
+    isAuthenticated: true,
+    username: data.username ?? "",
+    authorities: data.authorities ?? [],
+    superAdmin: !!data.superAdmin,
+    customerSearch: !!data.customerSearch,
+    customerAdd: !!data.customerAdd,
+    customerEdit: !!data.customerEdit,
+    customerDelete: !!data.customerDelete,
+});
 ```
 
 
@@ -202,25 +194,32 @@ useEffect(() => {
 + 요청 헤더에 `Authorization: Bearer Token`을 추가합니다.
 + 토큰 갱신에 실패하면 인증 상태를 초기화할 수 있도록 처리했습니다.
 
+아래는 `authFetch` 내부의 요청 처리 코드입니다.
+
 ```javascript
-await keycloak.updateToken(30);
+if (!keycloak.authenticated) {
+    throw new Error("로그인이 필요합니다.");
+}
 
-const headers = {
-    ...options.headers,
-    Authorization: `Bearer ${keycloak.token}`,
-};
+try {
+    await keycloak.updateToken(30);
+} catch (error) {
+    console.error("토큰 갱신 실패:", error);
+    keycloak.clearToken();
+    notifyTokenRefreshFailed();
+    throw new Error("로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
+}
 
-return fetch(`${API_BASE_URL}${path}`, {
+const headers = new Headers(options.headers || {});
+
+if (keycloak.token) {
+    headers.set("Authorization", `Bearer ${keycloak.token}`);
+}
+
+return fetch(url, {
     ...options,
     headers,
 });
-```
-```javascript
-catch (error) {
-    keycloak.clearToken();
-    window.dispatchEvent(new Event("auth-token-refresh-failed"));
-    throw error;
-}
 ```
 
 <br/><br/>
@@ -232,17 +231,18 @@ catch (error) {
 
 + 로그인하지 않은 사용자는 보호된 페이지에 접근할 수 없습니다.
 + 특정 페이지는 `SUPER_ADMIN` 역할을 가진 사용자만 접근할 수 있습니다.
-+ 권한이 없는 사용자가 직접 URL로 접근하는 상황을 막았습니다.
++ 보호된 관리자 화면은 로그인 여부와 필요한 역할을 확인하고, 조건에 맞지 않으면 다른 화면으로 이동시킵니다.
++ 실제 API 요청에 대한 인증과 권한 검사는 백엔드에서도 처리합니다.
 
 ```javascript
-if (!authState.authenticated) {
-    return <Navigate to="/login" replace />;
+if (!auth.isAuthenticated) {
+    const redirect = encodeURIComponent(location.pathname);
+    return <Navigate to={`/login?redirect=${redirect}`} replace />;
 }
 
-if (requiredRole && !authState.roles.includes(requiredRole)) {
+if (requiredRole === "SUPER_ADMIN" && !auth.superAdmin) {
     return <Navigate to="/" replace />;
 }
-
 return children;
 ```
 ```javascript
@@ -288,7 +288,7 @@ return children;
 
 3) 문제 해결 <br/>
 + 수정된 고객 데이터를 부모 컴포넌트로 전달했습니다.
-+ 이후 searchRows와 TanStackQuery 캐시를 함께 갱신해 검색 화면에서도 수정 결과가 바로 반영되도록 했습니다.
++ 이후 searchRows와 TanStack Query 캐시를 함께 갱신해 검색 화면에서도 수정 결과가 바로 반영되도록 했습니다.
   
 ```javascript
 setSearchRows((oldData) => {
@@ -329,9 +329,7 @@ queryClient.setQueriesData({ queryKey: ["customers"] }, (oldData) => {
   
 ```javascript
 try {
-    if (keycloak.authenticated) {
-        await keycloak.updateToken(30);
-    }
+    await keycloak.updateToken(30);
 } catch (error) {
     keycloak.clearToken();
     window.dispatchEvent(new Event(AUTH_TOKEN_REFRESH_FAILED_EVENT));
@@ -380,7 +378,7 @@ return fetch(url, {
 
 1) 현재 처리 방식 <br/>
 + 로그인 후 `/api/auth/me`를 통해 현재 사용자의 역할과 권한을 조회합니다.
-+ 조회된 권한을 기준으로 고객 검색, 추가, 수정, 삭제 버튼의 사용 가능 여부를 제어했습니다.
++ 고객 검색, 추가, 수정, 삭제 버튼을 누르면 조회된 권한을 확인하고, 권한이 없을 때는 안내 메시지를 표시해 요청을 막았습니다.
 + 최종 API 접근 제어는 백엔드에서 처리하고 프론트엔드는 권한에 맞는 화면을 보여주는 역할을 했습니다.
 
 <br/><br/>
@@ -398,5 +396,7 @@ return fetch(url, {
 
 <br/><br/>
 
+### 🔶 실행 방법
 
-
++ Keycloak 서버 주소, Realm, Client ID를 설정한 `src/keycloak.js` 파일을 별도로 준비해야 합니다. 현재 저장소에는 해당 파일이 포함되어 있지 않습니다.
++ 백엔드와 Keycloak을 실행한 뒤 `npm install`, `npm run dev`를 차례로 실행합니다.
